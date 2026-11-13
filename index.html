@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>BilKod Robot Kodlama</title>
+<style>
+:root{
+  --flow:#F4B400; --flow-d:#C98F00;
+  --motor:#2EA55A; --motor-d:#1E7A41;
+  --light:#16A3A0; --light-d:#0E7472;
+  --sound:#E2453C; --sound-d:#A82C25;
+  --display:#D0384F; --display-d:#962437;
+  --input:#3D8FE0; --input-d:#2A68A8;
+  --sensor:#F28B2C; --sensor-d:#BC6214;
+  --bg:#EEF3F8; --ink:#1F2B3A;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;font-family:"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg);user-select:none;-webkit-user-select:none}
+#app{display:flex;flex-direction:column;height:100%}
+/* ---------- top bar ---------- */
+#top{height:68px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08);z-index:5}
+.tbtn{width:52px;height:52px;border-radius:14px;border:none;display:grid;place-items:center;cursor:pointer;background:#E7EDF4;flex:none}
+.tbtn svg{width:32px;height:32px}
+.tbtn:active{transform:scale(.94)}
+#btConnect{background:#2F6FDB;width:auto;padding:0 14px;gap:8px;display:flex;color:#fff;font-weight:700;font-size:15px}
+#btConnect.on{background:#2EA55A}
+#btConnect.busy{background:#8AA4CC}
+#stopBtn{background:#E2453C}
+#hubStat{display:flex;align-items:center;gap:10px;background:#F3F6FA;border-radius:16px;padding:6px 12px;height:52px}
+#ledDot{width:26px;height:26px;border-radius:50%;background:#222;border:3px solid #fff;box-shadow:0 0 0 2px #ccd5e0}
+#motorGlyph{width:34px;height:34px}
+#motorGlyph.spin{animation:spin var(--spd,1s) linear infinite}
+#motorGlyph.spin.rev{animation-direction:reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+.stat{display:flex;align-items:center;gap:4px;font-weight:800;font-size:18px;min-width:44px}
+.stat svg{width:30px;height:30px}
+.portTag{font-size:11px;font-weight:700;color:#6b7a8c}
+.spacer{flex:1}
+/* ---------- canvas ---------- */
+#main{flex:1;position:relative;overflow:hidden}
+#canvas{position:absolute;inset:0;overflow:auto;touch-action:pan-x pan-y}
+#world{position:relative;width:3000px;height:2000px;background-image:radial-gradient(#c9d4e2 1.5px,transparent 1.5px);background-size:28px 28px}
+.script{position:absolute;display:flex;align-items:flex-start}
+.list{display:flex;align-items:flex-start}
+/* blocks */
+.blk{display:flex;flex-direction:column;align-items:center;width:78px;flex:none;touch-action:none;cursor:grab;position:relative}
+.face{width:74px;height:74px;border-radius:16px;display:grid;place-items:center;position:relative;box-shadow:inset 0 -6px 0 rgba(0,0,0,.18);z-index:1}
+.face svg{width:52px;height:52px;pointer-events:none}
+.face::after{content:"";position:absolute;right:-7px;top:26px;width:14px;height:20px;border-radius:0 10px 10px 0;background:inherit;z-index:-1}
+.blk.start .face{border-radius:30px 16px 16px 30px}
+.chip{margin-top:-4px;min-width:46px;max-width:74px;height:32px;padding:0 8px;border-radius:0 0 12px 12px;background:var(--input);color:#fff;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center;gap:2px;overflow:hidden;white-space:nowrap;box-shadow:inset 0 -4px 0 rgba(0,0,0,.15)}
+.chip.sens{background:var(--sensor)}
+.chip svg{width:26px;height:26px;pointer-events:none;flex:none}
+.chip .sw{width:22px;height:22px;border-radius:50%;border:2px solid #fff}
+.cat-flow .face{background:var(--flow)} .cat-motor .face{background:var(--motor)} .cat-light .face{background:var(--light)}
+.cat-sound .face{background:var(--sound)} .cat-display .face{background:var(--display)}
+.blk.run .face{box-shadow:0 0 0 5px #fff,0 0 0 9px #2F6FDB,inset 0 -6px 0 rgba(0,0,0,.18)}
+/* repeat */
+.rep{display:flex;align-items:flex-start;position:relative;flex:none;touch-action:none}
+.rep::before{content:"";position:absolute;left:40px;right:0;top:0;height:16px;background:var(--flow);border-radius:0 12px 0 0}
+.rep>.blk .face::after{display:none}
+.rep>.inner{display:flex;align-items:flex-start;min-width:86px;min-height:110px;margin-top:16px;padding:6px 6px 0 6px;background:rgba(244,180,0,.10);border-bottom:6px solid var(--flow);border-radius:0 0 10px 0}
+.rep>.tail{width:18px;height:132px;background:var(--flow);border-radius:0 12px 12px 0;box-shadow:inset -4px 0 0 rgba(0,0,0,.12)}
+.rep.run>.blk .face{box-shadow:0 0 0 5px #fff,0 0 0 9px #2F6FDB}
+/* ghost & indicator */
+#ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:50;opacity:.9;filter:drop-shadow(0 8px 12px rgba(0,0,0,.25));display:none}
+#ind{position:absolute;width:8px;height:80px;border-radius:4px;background:#2F6FDB;display:none;pointer-events:none;z-index:4;box-shadow:0 0 0 3px #fff}
+/* palette */
+#pal{height:150px;flex:none;display:flex;background:#fff;box-shadow:0 -2px 8px rgba(0,0,0,.08);z-index:5}
+#tabs{display:flex;flex-direction:column;justify-content:center;gap:6px;padding:6px 8px;background:#F3F6FA}
+.tab{width:52px;height:30px;border-radius:10px;border:3px solid transparent;cursor:pointer}
+.tab.on{border-color:#1F2B3A}
+#palRow{flex:1;display:flex;align-items:center;gap:10px;padding:0 16px;overflow-x:auto;overflow-y:hidden}
+#palRow .blk{cursor:grab}
+#pal.trash{background:#FDE3E1}
+/* display panel */
+#disp{position:absolute;right:16px;top:16px;width:42%;height:46%;min-width:260px;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 8px 30px rgba(0,0,0,.25);display:none;z-index:6;border:6px solid var(--display)}
+#disp.medium{display:block}
+#disp.full{display:block;right:0;top:0;width:100%;height:100%;border-radius:0}
+#dispBg{position:absolute;inset:0}
+#dispBg svg{width:100%;height:100%}
+#dispTxt{position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(40px,9vw,140px);font-weight:900;color:#1F2B3A;text-shadow:0 0 12px #fff,0 0 4px #fff;text-align:center;padding:10px;word-break:break-word}
+#dispClose{position:absolute;right:8px;top:8px;width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,.85);font-size:22px;font-weight:900;cursor:pointer}
+/* modal */
+.modalBack{position:fixed;inset:0;background:rgba(20,30,45,.45);display:none;align-items:center;justify-content:center;z-index:100}
+.modalBack.show{display:flex}
+.modal{background:#fff;border-radius:22px;padding:18px;max-width:94vw;max-height:90vh;overflow:auto;box-shadow:0 20px 50px rgba(0,0,0,.3);min-width:300px}
+.mtabs{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.mtab,.qbtn{height:56px;min-width:56px;border-radius:14px;border:3px solid transparent;background:#EEF3F8;display:grid;place-items:center;cursor:pointer;font-size:22px;font-weight:800;padding:0 8px}
+.mtab.on{border-color:#2F6FDB;background:#E3ECFB}
+.mtab svg,.qbtn svg{width:36px;height:36px}
+.qbtn.sens{background:var(--sensor)} .qbtn.inp{background:var(--input)}
+.grid{display:grid;gap:10px}
+.cell{border:none;border-radius:14px;background:#EEF3F8;cursor:pointer;display:grid;place-items:center;font-size:24px;font-weight:800;color:var(--ink);padding:0}
+.cell:active{transform:scale(.95)}
+.cell.sel{outline:4px solid #2F6FDB}
+.numShow{font-size:40px;font-weight:900;text-align:center;background:#F3F6FA;border-radius:14px;padding:8px;margin-bottom:10px;min-height:64px}
+.okBtn{background:#2EA55A;color:#fff}
+.txtIn{font-size:32px;font-weight:800;width:100%;padding:10px;border-radius:14px;border:3px solid #cfd8e3;text-align:center;margin-bottom:10px}
+.bgThumb svg{width:120px;height:75px;border-radius:10px;display:block}
+.help h2{margin:0 0 8px} .help p,.help li{font-size:15px;line-height:1.45}
+#simPanel{position:absolute;left:16px;top:16px;background:#fff;border-radius:16px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none;z-index:7;width:300px}
+#simPanel.show{display:block}
+#simPanel h3{margin:0 0 6px;font-size:15px}
+#simPanel .row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+#simPanel button{border:none;border-radius:10px;background:var(--sensor);width:52px;height:44px;display:grid;place-items:center;cursor:pointer}
+#simPanel button svg{width:34px;height:34px}
+#simPanel input[type=range]{width:100%}
+#toast{position:fixed;left:50%;bottom:170px;transform:translateX(-50%);background:#1F2B3A;color:#fff;padding:12px 18px;border-radius:14px;font-weight:600;display:none;z-index:200;max-width:90vw;text-align:center}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <button class="tbtn" id="btConnect" title="Hub'a bağlan"><svg viewBox="0 0 48 48"><path d="M14 15l20 18-10 9V6l10 9-20 18" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="btLabel">Bağlan</span></button>
+    <div id="hubStat" title="Hub durumu">
+      <div id="ledDot"></div>
+      <svg id="motorGlyph" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="#2EA55A"/><path d="M24 9v30M9 24h30" stroke="#fff" stroke-width="6" stroke-linecap="round"/></svg>
+      <div class="stat" title="Mesafe sensörü"><span id="icoDist"></span><span id="distVal">–</span></div>
+      <div class="stat" title="Eğim sensörü"><span id="tiltVal"></span></div>
+      <div class="stat" title="Ses (mikrofon)"><span id="icoMic"></span><span id="micVal">–</span></div>
+    </div>
+    <div class="spacer"></div>
+    <button class="tbtn" id="stopBtn" title="Hepsini durdur"><svg viewBox="0 0 48 48"><rect x="11" y="11" width="26" height="26" rx="4" fill="#fff"/></svg></button>
+    <button class="tbtn" id="simBtn" title="Deneme paneli (hub olmadan sensör dene)"></button>
+    <button class="tbtn" id="saveBtn" title="Projeyi dosyaya kaydet"></button>
+    <button class="tbtn" id="openBtn" title="Proje dosyası aç"></button>
+    <button class="tbtn" id="newBtn" title="Yeni proje (hepsini sil)"></button>
+    <button class="tbtn" id="helpBtn" title="Yardım"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="#2F6FDB"/><path d="M18 19a6 6 0 1 1 9 5c-2 1-3 2-3 4v1" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="35" r="2.6" fill="#fff"/></svg></button>
+    <input type="file" id="fileIn" accept=".json,application/json" style="display:none">
+  </div>
+  <div id="main">
+    <div id="canvas"><div id="world"><div id="ind"></div></div></div>
+    <div id="disp"><div id="dispBg"></div><div id="dispTxt"></div><button id="dispClose" title="Ekranı kapat">×</button></div>
+    <div id="simPanel">
+      <h3>Deneme paneli (hub yokken)</h3>
+      <div>Mesafe: <b id="simDistV">10</b></div>
+      <input type="range" id="simDist" min="0" max="10" step="1" value="10">
+      <div class="row" id="simTilt"></div>
+      <div class="row"><button id="simSound" title="Ses değişimi"></button></div>
+    </div>
+  </div>
+  <div id="pal"><div id="tabs"></div><div id="palRow"></div></div>
+</div>
+<div id="ghost"></div>
+<div class="modalBack" id="mback"><div class="modal" id="modal"></div></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   ICONS (original simple drawings, white on colored block)
+   ===================================================================== */
+const W='#fff';
+const S=(inner,vb='0 0 48 48')=>`<svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`;
+const motorBox=(extra)=>`<rect x="5" y="12" width="28" height="22" rx="4" fill="${W}"/><circle cx="12" cy="23" r="3.5" fill="#2EA55A"/><rect x="33" y="19" width="6" height="8" rx="1.5" fill="${W}"/>${extra||''}`;
+const screenBox=(extra)=>`<rect x="5" y="8" width="38" height="26" rx="4" fill="${W}"/><rect x="9" y="12" width="30" height="18" rx="2" fill="#3a8ee0"/><rect x="20" y="34" width="8" height="5" fill="${W}"/><rect x="14" y="39" width="20" height="3" rx="1.5" fill="${W}"/>${extra||''}`;
+const ICON={
+  play:S(`<path d="M15 9l24 15-24 15z" fill="${W}" stroke="${W}" stroke-width="3" stroke-linejoin="round"/>`),
+  key:S(`<rect x="7" y="7" width="34" height="34" rx="7" fill="${W}"/><rect x="11" y="10" width="26" height="24" rx="5" fill="#e8e8e8"/>`),
+  msgIn:S(`<rect x="5" y="14" width="38" height="26" rx="4" fill="${W}"/><path d="M5 16l19 14 19-14" fill="none" stroke="#C98F00" stroke-width="3"/><path d="M24 2v10m-5-5l5 5 5-5" fill="none" stroke="${W}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>`),
+  msgOut:S(`<rect x="5" y="16" width="38" height="26" rx="4" fill="${W}"/><path d="M5 18l19 14 19-14" fill="none" stroke="#C98F00" stroke-width="3"/><path d="M24 13V3m-5 5l5-5 5 5" fill="none" stroke="${W}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>`),
+  hourglass:S(`<path d="M13 6h22M13 42h22" stroke="${W}" stroke-width="4" stroke-linecap="round"/><path d="M15 7c0 10 8 12 8 17s-8 7-8 17h18c0-10-8-12-8-17s8-7 8-17z" fill="${W}"/><path d="M19 38c1-4 4-5 5-6 1 1 4 2 5 6z" fill="#C98F00"/>`),
+  loop:S(`<path d="M38 20A15 15 0 0 0 11 15" fill="none" stroke="${W}" stroke-width="5" stroke-linecap="round"/><path d="M6 10l4 8 8-3" fill="none" stroke="${W}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 28a15 15 0 0 0 27 5" fill="none" stroke="${W}" stroke-width="5" stroke-linecap="round"/><path d="M42 38l-4-8-8 3" fill="none" stroke="${W}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>`),
+  motorCW:S(motorBox(`<path d="M8 40a16 8 0 0 0 30 0" fill="none" stroke="${W}" stroke-width="3.5" stroke-linecap="round"/><path d="M38 40l1-7m-1 7l-7-2" stroke="${W}" stroke-width="3.5" stroke-linecap="round"/>`)),
+  motorCCW:S(motorBox(`<path d="M8 40a16 8 0 0 0 30 0" fill="none" stroke="${W}" stroke-width="3.5" stroke-linecap="round"/><path d="M8 40l-1-7m1 7l7-2" stroke="${W}" stroke-width="3.5" stroke-linecap="round"/>`)),
+  motorPow:S(motorBox(`<path d="M10 45a14 14 0 0 1 28 0" fill="none" stroke="${W}" stroke-width="3.5"/><path d="M24 45l7-8" stroke="${W}" stroke-width="3.5" stroke-linecap="round"/>`)),
+  motorTime:S(motorBox(`<path d="M17 37h14M17 47h14" stroke="${W}" stroke-width="2.5"/><path d="M18 37c0 4 5 4 5 5s-5 1-5 5h12c0-4-5-4-5-5s5-1 5-5z" fill="${W}"/>`)),
+  motorOff:S(motorBox(`<path d="M16 38l14 9M30 38l-14 9" stroke="${W}" stroke-width="4" stroke-linecap="round"/>`)),
+  bulb:S(`<path d="M24 5a13 13 0 0 0-8 23c2 2 3 4 3 6h10c0-2 1-4 3-6A13 13 0 0 0 24 5z" fill="${W}"/><rect x="18" y="36" width="12" height="4" rx="2" fill="${W}"/><rect x="20" y="41" width="8" height="3" rx="1.5" fill="${W}"/><path d="M19 20q5 6 10 0" fill="none" stroke="#16A3A0" stroke-width="2.5"/>`),
+  note:S(`<path d="M18 36V10l20-5v26" fill="none" stroke="${W}" stroke-width="4" stroke-linejoin="round"/><ellipse cx="13" cy="36" rx="6.5" ry="5" fill="${W}"/><ellipse cx="33" cy="31" rx="6.5" ry="5" fill="${W}"/>`),
+  picture:S(`<rect x="5" y="8" width="38" height="32" rx="4" fill="${W}"/><path d="M9 36l10-12 7 8 5-5 8 9z" fill="#2EA55A"/><circle cx="33" cy="17" r="4" fill="#F4B400"/>`),
+  screen:S(screenBox(`<text x="24" y="26" text-anchor="middle" font-size="12" font-weight="900" fill="${W}" font-family="Arial">123</text>`)),
+  scrAdd:S(screenBox(`<path d="M24 14v12M18 21h12" stroke="${W}" stroke-width="4" stroke-linecap="round"/>`)),
+  scrSub:S(screenBox(`<path d="M18 21h12" stroke="${W}" stroke-width="4" stroke-linecap="round"/>`)),
+  scrMul:S(screenBox(`<path d="M19 16l10 10M29 16l-10 10" stroke="${W}" stroke-width="4" stroke-linecap="round"/>`)),
+  scrDiv:S(screenBox(`<path d="M18 21h12" stroke="${W}" stroke-width="3.5" stroke-linecap="round"/><circle cx="24" cy="15.5" r="2.3" fill="${W}"/><circle cx="24" cy="26.5" r="2.3" fill="${W}"/>`)),
+  scrClose:S(screenBox(`<path d="M24 14v12m-5-5l5 5 5-5" fill="none" stroke="${W}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>`)),
+  scrMed:S(screenBox(`<rect x="17" y="15" width="14" height="12" rx="2" fill="none" stroke="${W}" stroke-width="3"/>`)),
+  scrFull:S(screenBox(`<path d="M12 18v-4h5M36 18v-4h-5M12 24v4h5M36 24v4h-5" fill="none" stroke="${W}" stroke-width="3" stroke-linecap="round"/>`)),
+  /* inputs */
+  dice:S(`<rect x="7" y="7" width="34" height="34" rx="8" fill="${W}"/><g fill="#2A68A8"><circle cx="16" cy="16" r="3.5"/><circle cx="32" cy="16" r="3.5"/><circle cx="24" cy="24" r="3.5"/><circle cx="16" cy="32" r="3.5"/><circle cx="32" cy="32" r="3.5"/></g>`),
+  inf:S(`<path d="M24 24c-5-7-15-7-15 0s10 7 15 0 15-7 15 0-10 7-15 0z" fill="none" stroke="${W}" stroke-width="5"/>`),
+  dispIn:S(`<rect x="5" y="9" width="38" height="28" rx="4" fill="${W}"/><text x="24" y="29" text-anchor="middle" font-size="14" font-weight="900" fill="#2A68A8" font-family="Arial">123</text>`),
+  distVal:S(`<rect x="4" y="16" width="22" height="16" rx="3" fill="${W}"/><circle cx="20" cy="21" r="2.6" fill="#BC6214"/><circle cx="20" cy="27" r="2.6" fill="#BC6214"/><path d="M30 18q4 6 0 12M35 15q6 9 0 18" fill="none" stroke="${W}" stroke-width="3" stroke-linecap="round"/><text x="42" y="44" text-anchor="end" font-size="13" font-weight="900" fill="${W}" font-family="Arial">#</text>`),
+  /* events (sensor modes) */
+  closer:S(`<rect x="3" y="16" width="20" height="16" rx="3" fill="${W}"/><circle cx="18" cy="21" r="2.4" fill="#BC6214"/><circle cx="18" cy="27" r="2.4" fill="#BC6214"/><rect x="38" y="14" width="7" height="20" rx="2" fill="${W}"/><path d="M34 24H26m4-4l-4 4 4 4" fill="none" stroke="${W}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>`),
+  further:S(`<rect x="3" y="16" width="20" height="16" rx="3" fill="${W}"/><circle cx="18" cy="21" r="2.4" fill="#BC6214"/><circle cx="18" cy="27" r="2.4" fill="#BC6214"/><rect x="38" y="14" width="7" height="20" rx="2" fill="${W}"/><path d="M26 24h8m-4-4l4 4-4 4" fill="none" stroke="${W}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>`),
+  anyDist:S(`<rect x="3" y="16" width="20" height="16" rx="3" fill="${W}"/><circle cx="18" cy="21" r="2.4" fill="#BC6214"/><circle cx="18" cy="27" r="2.4" fill="#BC6214"/><rect x="40" y="14" width="6" height="20" rx="2" fill="${W}"/><path d="M26 24h11m-8-4l-4 4 4 4m5-8l4 4-4 4" fill="none" stroke="${W}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`),
+  tiltUp:S(`<g transform="rotate(-25 24 26)"><rect x="8" y="20" width="32" height="12" rx="3" fill="${W}"/><circle cx="34" cy="26" r="2.5" fill="#BC6214"/></g><path d="M24 4v10m-4-6l4-4 4 4" fill="none" stroke="${W}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`),
+  tiltDown:S(`<g transform="rotate(25 24 22)"><rect x="8" y="16" width="32" height="12" rx="3" fill="${W}"/><circle cx="34" cy="22" r="2.5" fill="#BC6214"/></g><path d="M24 44V34m-4 6l4 4 4-4" fill="none" stroke="${W}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`),
+  tiltThis:S(`<g transform="rotate(-25 24 26)"><rect x="8" y="20" width="32" height="12" rx="3" fill="${W}"/></g><path d="M5 10h10m-4-4l4 4-4 4" fill="none" stroke="${W}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(28 0)"/>`),
+  tiltThat:S(`<g transform="rotate(25 24 26)"><rect x="8" y="20" width="32" height="12" rx="3" fill="${W}"/></g><path d="M15 10H5m4-4l-4 4 4 4" fill="none" stroke="${W}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`),
+  noTilt:S(`<rect x="8" y="20" width="32" height="12" rx="3" fill="${W}"/><path d="M6 38h36" stroke="${W}" stroke-width="3" stroke-linecap="round"/>`),
+  shake:S(`<rect x="11" y="18" width="26" height="12" rx="3" fill="${W}"/><path d="M5 14l4 4-4 4 4 4-4 4M43 14l-4 4 4 4-4 4 4 4" fill="none" stroke="${W}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`),
+  soundCh:S(`<rect x="13" y="6" width="12" height="22" rx="6" fill="${W}"/><path d="M8 22a11 11 0 0 0 22 0M19 33v8M13 42h12" fill="none" stroke="${W}" stroke-width="3" stroke-linecap="round"/><path d="M34 16q4 6 0 12M39 12q7 10 0 20" fill="none" stroke="${W}" stroke-width="3" stroke-linecap="round"/>`),
+  rec:S(`<circle cx="24" cy="24" r="16" fill="#E2453C"/><circle cx="24" cy="24" r="7" fill="${W}"/>`),
+  /* toolbar */
+  save:S(`<path d="M24 6v24m-9-9l9 9 9-9" fill="none" stroke="#2F6FDB" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 32v8h32v-8" fill="none" stroke="#2F6FDB" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>`),
+  open:S(`<path d="M6 14h13l4 5h19v20H6z" fill="#F4B400"/><path d="M24 36V22m-6 6l6-6 6 6" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`),
+  trash:S(`<path d="M10 14h28M19 14V9h10v5" fill="none" stroke="#E2453C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 14l2 26h18l2-26" fill="#E2453C"/>`),
+  sim:S(`<rect x="6" y="16" width="22" height="16" rx="3" fill="#F28B2C"/><circle cx="22" cy="21" r="2.4" fill="#fff"/><circle cx="22" cy="27" r="2.4" fill="#fff"/><path d="M32 18q4 6 0 12M37 15q6 9 0 18" fill="none" stroke="#F28B2C" stroke-width="3.5" stroke-linecap="round"/>`),
+};
+const EVENT_ICON={closer:'closer',further:'further',anyDist:'anyDist',tiltUp:'tiltUp',tiltDown:'tiltDown',tiltThis:'tiltThis',tiltThat:'tiltThat',noTilt:'noTilt',shake:'shake',soundCh:'soundCh'};
+const EVENT_NAME={closer:'Yaklaşınca',further:'Uzaklaşınca',anyDist:'Mesafe değişince',tiltUp:'Yukarı eğilince',tiltDown:'Aşağı eğilince',tiltThis:'Bu yöne eğilince',tiltThat:'Öbür yöne eğilince',noTilt:'Düz durunca',shake:'Sallanınca',soundCh:'Ses olunca'};
+const TILT_STATES=['tiltUp','tiltDown','tiltThis','tiltThat','noTilt'];
+
+/* =====================================================================
+   LED colors 0..10 (as in WeDo 2.0)
+   ===================================================================== */
+const COLORS=[[0,0,0],[255,70,150],[140,0,210],[0,0,255],[0,140,255],[0,230,200],[0,220,0],[255,220,0],[255,120,0],[255,0,0],[255,255,255]];
+const rgbCss=c=>`rgb(${c[0]},${c[1]},${c[2]})`;
+
+/* =====================================================================
+   BACKGROUNDS (original simple scenes, no rainbows)
+   ===================================================================== */
+const BGS=[null,
+ `<rect width="160" height="100" fill="#8fd0ff"/><g fill="#fff"><ellipse cx="40" cy="30" rx="22" ry="10"/><ellipse cx="55" cy="25" rx="15" ry="10"/><ellipse cx="115" cy="50" rx="25" ry="10"/><ellipse cx="128" cy="44" rx="14" ry="9"/></g>`,
+ `<rect width="160" height="100" fill="#bfe8ff"/><circle cx="125" cy="25" r="12" fill="#ffd23f"/><rect y="55" width="160" height="45" fill="#2f86d6"/><path d="M0 60q10-6 20 0t20 0 20 0 20 0 20 0 20 0 20 0 20 0" fill="none" stroke="#bfe8ff" stroke-width="3"/><path d="M0 75q10-6 20 0t20 0 20 0 20 0 20 0 20 0 20 0 20 0" fill="none" stroke="#8cc8f5" stroke-width="3"/>`,
+ `<rect width="160" height="100" fill="#d6f2c6"/><rect y="80" width="160" height="20" fill="#5aa845"/>${[15,45,75,105,135].map((x,i)=>`<rect x="${x-3}" y="${60-i%2*6}" width="6" height="${22+i%2*6}" fill="#7a4b26"/><polygon points="${x},${18+i%2*8} ${x-18},${66-i%2*4} ${x+18},${66-i%2*4}" fill="#2e7d32"/>`).join('')}`,
+ `<rect width="160" height="100" fill="#0d1b3d"/>${Array.from({length:40},(_,i)=>`<circle cx="${(i*37)%160}" cy="${(i*53)%100}" r="${i%3?0.8:1.4}" fill="#fff"/>`).join('')}<circle cx="115" cy="62" r="20" fill="#e3874a"/><ellipse cx="115" cy="62" rx="32" ry="6" fill="none" stroke="#f6c17a" stroke-width="3"/>`,
+ `<rect width="160" height="100" fill="#ffe2b8"/>${[[5,40,25],[32,25,22],[56,50,30],[88,15,26],[116,35,22],[140,55,20]].map(([x,y,w],i)=>`<rect x="${x}" y="${y}" width="${w}" height="${100-y}" fill="${['#5c6f8a','#7a8fb0','#4a5a72','#6c7f9c','#56677f','#7d90ad'][i]}"/>${Array.from({length:6},(_,j)=>`<rect x="${x+5}" y="${y+6+j*10}" width="5" height="5" fill="#ffe68a"/><rect x="${x+w-10}" y="${y+6+j*10}" width="5" height="5" fill="#ffe68a"/>`).join('')}`).join('')}`,
+ `<rect width="160" height="100" fill="#9fdcff"/><circle cx="30" cy="25" r="13" fill="#ffd23f"/><rect y="60" width="160" height="40" fill="#7cc34f"/><rect x="95" y="38" width="36" height="24" fill="#c0392b"/><polygon points="91,40 113,24 135,40" fill="#8e2a20"/><rect x="108" y="48" width="9" height="14" fill="#fff"/>`,
+ `<rect width="160" height="100" fill="#ffe9a8"/><circle cx="130" cy="22" r="13" fill="#ff9f1c"/><path d="M0 75q40-25 80 0t80 0V100H0z" fill="#e8b25b"/><path d="M0 88q50-15 100 0t60 0V100H0z" fill="#d49a3f"/><rect x="35" y="45" width="7" height="30" rx="3" fill="#3f8f3a"/><rect x="28" y="52" width="5" height="12" rx="2.5" fill="#3f8f3a"/><rect x="43" y="50" width="5" height="10" rx="2.5" fill="#3f8f3a"/>`,
+ `<rect width="160" height="100" fill="#dcecff"/><rect y="70" width="160" height="30" fill="#fff"/><circle cx="80" cy="66" r="13" fill="#fff" stroke="#c9d9ee"/><circle cx="80" cy="44" r="9" fill="#fff" stroke="#c9d9ee"/><circle cx="77" cy="42" r="1.3" fill="#333"/><circle cx="83" cy="42" r="1.3" fill="#333"/><polygon points="80,45 88,47 80,48" fill="#ff8c1a"/>${Array.from({length:25},(_,i)=>`<circle cx="${(i*29)%160}" cy="${(i*41)%70}" r="1.6" fill="#fff"/>`).join('')}`,
+ `<rect width="160" height="100" fill="#1d2b55"/><circle cx="120" cy="28" r="14" fill="#fff6c9"/><circle cx="126" cy="24" r="12" fill="#1d2b55"/>${Array.from({length:30},(_,i)=>`<circle cx="${(i*47)%160}" cy="${(i*23)%60}" r="${i%4?0.8:1.5}" fill="#fff"/>`).join('')}<rect y="80" width="160" height="20" fill="#14203f"/>`,
+ `<rect width="160" height="100" fill="#1b8fb8"/><rect y="85" width="160" height="15" fill="#e6c98a"/><g fill="#ff8c42"><ellipse cx="50" cy="45" rx="13" ry="8"/><polygon points="62,45 72,37 72,53"/></g><circle cx="45" cy="43" r="1.8" fill="#222"/><g fill="#ffd23f"><ellipse cx="115" cy="62" rx="10" ry="6"/><polygon points="124,62 132,56 132,68"/></g>${[[90,30,3],[95,20,2],[30,70,2.5],[140,35,2]].map(([x,y,r])=>`<circle cx="${x}" cy="${y}" r="${r}" fill="none" stroke="#bfefff" stroke-width="1"/>`).join('')}<path d="M20 85q-4-15 2-25M28 85q4-12-2-20M140 85q-5-14 3-22" stroke="#2e9e52" stroke-width="3" fill="none"/>`,
+];
+const NB=BGS.length-1;
+const bgSvg=n=>BGS[n]?`<svg viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">${BGS[n]}</svg>`:'';
+
+/* =====================================================================
+   SOUND (Web Audio synthesis; 0 = teacher/child recording)
+   ===================================================================== */
+let AC=null, recordedBuf=null;
+function audio(){ if(!AC){ try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){} } if(AC&&AC.state==='suspended') AC.resume(); return AC; }
+function tone(t,f,d,type='sine',vol=.25,f2){ const a=audio(); if(!a) return; const o=a.createOscillator(), g=a.createGain(); const t0=a.currentTime+t;
+  o.type=type; o.frequency.setValueAtTime(f,t0); if(f2) o.frequency.exponentialRampToValueAtTime(f2,t0+d);
+  g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(vol,t0+.01); g.gain.exponentialRampToValueAtTime(0.0001,t0+d);
+  o.connect(g).connect(a.destination); o.start(t0); o.stop(t0+d+.05); }
+function noise(t,d,vol=.3){ const a=audio(); if(!a) return; const b=a.createBuffer(1,a.sampleRate*d,a.sampleRate), ch=b.getChannelData(0); for(let i=0;i<ch.length;i++) ch[i]=(Math.random()*2-1)*(1-i/ch.length);
+  const s=a.createBufferSource(), g=a.createGain(); g.gain.value=vol; s.buffer=b; s.connect(g).connect(a.destination); s.start(a.currentTime+t); }
+const SOUNDS=[
+  ()=>{ const a=audio(); if(!a||!recordedBuf){ tone(0,440,.2,'square',.1); return .25;} const s=a.createBufferSource(); s.buffer=recordedBuf; s.connect(a.destination); s.start(); return recordedBuf.duration; },
+  ()=>{ tone(0,523,.15); tone(.15,659,.15); tone(.3,784,.3); return .65; },
+  ()=>{ tone(0,784,.15); tone(.15,659,.15); tone(.3,523,.3); return .65; },
+  ()=>{ tone(0,150,.45,'triangle',.35,700); return .5; },
+  ()=>{ tone(0,1400,.3,'square',.12,180); return .35; },
+  ()=>{ tone(0,988,.08,'square',.12); tone(.08,1319,.35,'square',.12); return .45; },
+  ()=>{ tone(0,600,.4,'sine',.2,950); tone(.4,950,.4,'sine',.2,600); tone(.8,600,.4,'sine',.2,950); return 1.25; },
+  ()=>{ noise(0,.12,.35); tone(0,130,.3,'sine',.5,45); noise(.35,.12,.35); tone(.35,130,.3,'sine',.5,45); return .7; },
+  ()=>{ tone(0,880,1.2,'sine',.25); tone(0,1760,.8,'sine',.1); return 1.2; },
+  ()=>{ tone(0,1400,.5,'sine',.2,2300); tone(.55,2300,.3,'sine',.2,1500); return .9; },
+  ()=>{ tone(0,350,.08,'sine',.4,1100); return .15; },
+  ()=>{ tone(0,70,1,'sawtooth',.12,160); tone(0,72,1,'square',.06,165); return 1.05; },
+  ()=>{ [523,659,784].forEach(f=>tone(0,f,.18,'triangle',.18)); [523,659,784,1047].forEach(f=>tone(.22,f,.6,'triangle',.15)); return .85; },
+  ()=>{ for(let i=0;i<6;i++) tone(i*.09,i%2?660:880,.08,'square',.1); return .6; },
+  ()=>{ tone(0,300,.25,'sawtooth',.15,250); tone(.25,250,.35,'sawtooth',.15,180); return .65; },
+];
+const NS=SOUNDS.length-1;
+function playSound(n){ n=Math.round(n); if(n<0||n>NS) n=1; let d=.3; try{ d=SOUNDS[n](); }catch(e){} return d; }
+
+/* =====================================================================
+   BLOCK DEFINITIONS
+   ===================================================================== */
+const NUMK=['num','rand','display','dist'];
+const DEFS={
+  start:{cat:'flow',icon:'play',isStart:true},
+  startKey:{cat:'flow',icon:'key',isStart:true,input:{def:{k:'letter',v:'A'},kinds:['letter']}},
+  startMsg:{cat:'flow',icon:'msgIn',isStart:true,input:{def:{k:'text',v:'a'},kinds:['text','num']}},
+  sendMsg:{cat:'flow',icon:'msgOut',input:{def:{k:'text',v:'a'},kinds:['text','num']}},
+  wait:{cat:'flow',icon:'hourglass',input:{def:{k:'num',v:1},kinds:['num','event','rand','display','dist'],dec:true,rand:[1,5]}},
+  repeat:{cat:'flow',icon:'loop',container:true,input:{def:{k:'inf'},kinds:['num','event','inf','rand','display','dist'],rand:[1,10]}},
+  motorThis:{cat:'motor',icon:'motorCW',tap:'motorThat'},
+  motorThat:{cat:'motor',icon:'motorCCW',tap:'motorThis'},
+  motorPower:{cat:'motor',icon:'motorPow',input:{def:{k:'num',v:8},kinds:NUMK,rand:[0,10],range:[0,10]}},
+  motorOn:{cat:'motor',icon:'motorTime',input:{def:{k:'num',v:1},kinds:NUMK,dec:true,rand:[1,5]}},
+  motorOff:{cat:'motor',icon:'motorOff'},
+  light:{cat:'light',icon:'bulb',input:{def:{k:'num',v:9},kinds:['color','num','rand','display','dist'],rand:[0,10],range:[0,10]}},
+  sound:{cat:'sound',icon:'note',input:{def:{k:'num',v:1},kinds:['sound','num','rand','display','dist'],rand:[1,NS],range:[0,NS]}},
+  background:{cat:'display',icon:'picture',input:{def:{k:'num',v:1},kinds:['bg','num','rand','display','dist'],rand:[1,NB],range:[1,NB]}},
+  display:{cat:'display',icon:'screen',input:{def:{k:'num',v:0},kinds:['num','text','rand','display','dist'],dec:true,rand:[0,10]}},
+  dispAdd:{cat:'display',icon:'scrAdd',tap:'dispSub',input:{def:{k:'num',v:1},kinds:NUMK,dec:true,rand:[1,10]}},
+  dispSub:{cat:'display',icon:'scrSub',tap:'dispMul',input:{def:{k:'num',v:1},kinds:NUMK,dec:true,rand:[1,10]}},
+  dispMul:{cat:'display',icon:'scrMul',tap:'dispDiv',input:{def:{k:'num',v:2},kinds:NUMK,dec:true,rand:[1,10]}},
+  dispDiv:{cat:'display',icon:'scrDiv',tap:'dispAdd',input:{def:{k:'num',v:2},kinds:NUMK,dec:true,rand:[1,10]}},
+  dispClose:{cat:'display',icon:'scrClose',tap:'dispMed'},
+  dispMed:{cat:'display',icon:'scrMed',tap:'dispFull'},
+  dispFull:{cat:'display',icon:'scrFull',tap:'dispClose'},
+};
+const PALETTE={
+  flow:{color:'var(--flow)',items:['start','startKey','startMsg','sendMsg','wait','repeat']},
+  motor:{color:'var(--motor)',items:['motorThis','motorThat','motorPower','motorOn','motorOff']},
+  ls:{color:'var(--sound)',items:['light','sound']},
+  display:{color:'var(--display)',items:['background','display','dispAdd','dispSub','dispMul','dispDiv','dispClose','dispMed','dispFull']},
+};
+
+/* =====================================================================
+   PROJECT MODEL
+   ===================================================================== */
+let uid=Date.now()%100000;
+const nid=()=>'b'+(uid++);
+function newBlock(type){ const d=DEFS[type]; const b={id:nid(),type}; if(d.input) b.input={...d.input.def}; if(d.container) b.children=[]; return b; }
+let project={scripts:[]};
+function defaultProject(){
+  const s1=[newBlock('start'),newBlock('motorThis'),newBlock('light'),newBlock('motorOn'),newBlock('sound')];
+  return {scripts:[{id:nid(),x:40,y:40,blocks:s1}]};
+}
+function save(){ try{ localStorage.setItem('bilkod-wedo-project',JSON.stringify(project)); }catch(e){} }
+function load(){ try{ const j=localStorage.getItem('bilkod-wedo-project'); if(j){ const p=JSON.parse(j); if(p&&Array.isArray(p.scripts)) return fixIds(p);} }catch(e){} return defaultProject(); }
+function fixIds(p){ const walk=l=>l.forEach(b=>{ b.id=nid(); if(!DEFS[b.type]) b.type='motorOff'; if(DEFS[b.type].container&&!b.children) b.children=[]; if(b.children) walk(b.children); }); p.scripts=p.scripts.filter(s=>s.blocks&&s.blocks.length); p.scripts.forEach(s=>{s.id=nid(); walk(s.blocks);}); return p; }
+function locate(bid){
+  let res=null;
+  const walk=(list,script,parent)=>{ list.forEach((b,i)=>{ if(res) return; if(b.id===bid) res={list,index:i,script,parent,block:b}; else if(b.children) walk(b.children,script,b); }); };
+  project.scripts.forEach(s=>{ if(!res) walk(s.blocks,s,null); });
+  return res;
+}
+
+/* =====================================================================
+   RENDERING
+   ===================================================================== */
+const $=id=>document.getElementById(id);
+const world=$('world'), canvas=$('canvas');
+const running=new Set();
+function chipHTML(b){
+  const inp=b.input; if(!inp) return '';
+  let cls='chip', h='';
+  switch(inp.k){
+    case 'num': if(b.type==='light'){ h=`<span class="sw" style="background:${rgbCss(COLORS[clamp(Math.round(inp.v),0,10)])}"></span>${inp.v}`; } else h=fmt(inp.v); break;
+    case 'text': h=escapeHtml(String(inp.v)).slice(0,6); break;
+    case 'letter': h=escapeHtml(inp.v); break;
+    case 'rand': h=ICON.dice; break;
+    case 'display': h=ICON.dispIn; break;
+    case 'dist': h=ICON.distVal; cls+=' sens'; break;
+    case 'inf': h=ICON.inf; break;
+    case 'event': h=ICON[EVENT_ICON[inp.v]]; cls+=' sens'; break;
+  }
+  return `<div class="${cls}">${h}</div>`;
+}
+function blockEl(b,{palette=false}={}){
+  const d=DEFS[b.type];
+  const face=`<div class="face">${ICON[d.icon]}</div>`;
+  const chip=chipHTML(b);
+  if(d.container && !palette){
+    const w=document.createElement('div'); w.className='rep'+(running.has(b.id)?' run':''); w.dataset.bid=b.id;
+    w.innerHTML=`<div class="blk cat-flow">${face}${chip}</div>`;
+    const inner=document.createElement('div'); inner.className='inner'; b.children.forEach(c=>inner.appendChild(blockEl(c))); w.appendChild(inner);
+    const t=document.createElement('div'); t.className='tail'; w.appendChild(t);
+    return w;
+  }
+  const e=document.createElement('div'); e.className=`blk cat-${d.cat}`+(d.isStart?' start':'')+(running.has(b.id)?' run':'');
+  if(palette) e.dataset.ptype=b.type; else e.dataset.bid=b.id;
+  e.innerHTML=face+chip; return e;
+}
+function listEl(list){ const l=document.createElement('div'); l.className='list'; list.forEach(b=>l.appendChild(blockEl(b))); return l; }
+function render(){
+  [...world.querySelectorAll('.script')].forEach(n=>n.remove());
+  project.scripts.forEach(s=>{ const e=document.createElement('div'); e.className='script'; e.style.left=s.x+'px'; e.style.top=s.y+'px'; e.dataset.sid=s.id; e.appendChild(listEl(s.blocks)); world.appendChild(e); });
+}
+function setRunning(id,on){ if(on) running.add(id); else running.delete(id); const el=world.querySelector(`[data-bid="${id}"]`); if(el) el.classList.toggle('run',on); }
+let palCat='flow';
+function renderPalette(){
+  const tabs=$('tabs'); tabs.innerHTML='';
+  Object.entries(PALETTE).forEach(([k,p])=>{ const t=document.createElement('div'); t.className='tab'+(k===palCat?' on':''); t.style.background=p.color; t.onclick=()=>{palCat=k;renderPalette();}; tabs.appendChild(t); });
+  const row=$('palRow'); row.innerHTML='';
+  PALETTE[palCat].items.forEach(type=>row.appendChild(blockEl(newBlock(type),{palette:true})));
+}
+
+/* =====================================================================
+   DRAG & DROP (pointer events: mouse + touch)
+   ===================================================================== */
+let pending=null, drag=null;
+const ghost=$('ghost'), ind=$('ind');
+document.addEventListener('pointerdown',e=>{
+  audio();
+  if(e.target.closest('.modalBack')||e.target.closest('#simPanel')||e.target.closest('#disp')) return;
+  const bEl=e.target.closest('[data-bid]'), pEl=e.target.closest('[data-ptype]');
+  if(!bEl&&!pEl) return;
+  e.preventDefault();
+  pending={x:e.clientX,y:e.clientY,el:bEl||pEl,bid:bEl&&bEl.dataset.bid,ptype:pEl&&pEl.dataset.ptype,chip:!!e.target.closest('.chip')};
+});
+document.addEventListener('pointermove',e=>{
+  if(drag){ moveDrag(e.clientX,e.clientY); return; }
+  if(pending && Math.hypot(e.clientX-pending.x,e.clientY-pending.y)>8){ beginDrag(e.clientX,e.clientY); }
+});
+document.addEventListener('pointerup',e=>{
+  if(drag){ endDrag(e.clientX,e.clientY); }
+  else if(pending){ const p=pending; pending=null; tapBlock(p); }
+  pending=null;
+});
+document.addEventListener('pointercancel',()=>{ if(drag) endDrag(drag.lastX,drag.lastY); pending=null; });
+
+function beginDrag(x,y){
+  const p=pending; pending=null;
+  const r=p.el.getBoundingClientRect();
+  let chain;
+  if(p.ptype){ chain=[newBlock(p.ptype)]; }
+  else{
+    const loc=locate(p.bid); if(!loc) return;
+    chain=loc.list.splice(loc.index);
+    if(!loc.parent && loc.list.length===0) project.scripts=project.scripts.filter(s=>s!==loc.script);
+    render();
+  }
+  drag={chain,offX:x-r.left,offY:y-r.top,lastX:x,lastY:y,best:null};
+  ghost.innerHTML=''; ghost.appendChild(listEl(chain)); ghost.style.display='block';
+  moveDrag(x,y);
+}
+function moveDrag(x,y){
+  drag.lastX=x; drag.lastY=y;
+  const gx=x-drag.offX, gy=y-drag.offY;
+  ghost.style.transform=`translate(${gx}px,${gy}px)`;
+  const overPal=$('pal').getBoundingClientRect().top<y;
+  $('pal').classList.toggle('trash',overPal);
+  drag.best=null;
+  if(!overPal){
+    const gr=ghost.getBoundingClientRect();
+    let best=null, bd=55;
+    for(const c of candidates(drag.chain)){
+      const px=c.prepend?gr.right:gr.left, py=gy+37;
+      const d=Math.hypot(px-c.x,py-c.y);
+      if(d<bd){bd=d;best=c;}
+    }
+    drag.best=best;
+  }
+  if(drag.best){ const wr=world.getBoundingClientRect(); ind.style.display='block'; ind.style.left=(drag.best.x-wr.left-4)+'px'; ind.style.top=(drag.best.y-wr.top-40)+'px'; }
+  else ind.style.display='none';
+  // autoscroll
+  const cr=canvas.getBoundingClientRect();
+  if(y<cr.bottom-70) drag.armed=true;
+  if(!drag.armed) return;
+  if(x>cr.right-40) canvas.scrollLeft+=12; if(x<cr.left+40) canvas.scrollLeft-=12;
+  if(y>cr.bottom-40&&!overPal) canvas.scrollTop+=12; if(y<cr.top+30) canvas.scrollTop-=12;
+}
+function candidates(chain){
+  const startChain=!!DEFS[chain[0].type].isStart; const res=[];
+  const el=b=>world.querySelector(`[data-bid="${b.id}"]`);
+  const walk=(list,top,ownerEl,script)=>{
+    if(top){ const f=list[0]; if(f && !DEFS[f.type].isStart){ const r=el(f).getBoundingClientRect(); res.push({list,index:0,x:r.left,y:r.top+37,prepend:true,script}); } }
+    else if(!startChain){ const inner=ownerEl.querySelector(':scope > .inner'); const r=inner.getBoundingClientRect(); res.push({list,index:0,x:r.left+4,y:r.top+43}); }
+    list.forEach((b,i)=>{ const e=el(b); if(!e) return; const r=e.getBoundingClientRect();
+      if(!startChain) res.push({list,index:i+1,x:r.right,y:r.top+37});
+      if(b.children) walk(b.children,false,e,script); });
+  };
+  project.scripts.forEach(s=>walk(s.blocks,true,null,s));
+  return res;
+}
+function endDrag(x,y){
+  ghost.style.display='none'; ind.style.display='none';
+  const overPal=$('pal').getBoundingClientRect().top<y; $('pal').classList.remove('trash');
+  const {chain,best}=drag; const gx=x-drag.offX, gy=y-drag.offY; drag=null;
+  if(overPal){ chain.forEach(stopBlockTree); render(); save(); return; }
+  if(best){
+    best.list.splice(best.index,0,...chain);
+    if(best.prepend){ const wr=world.getBoundingClientRect(); best.script.x=Math.max(0,gx-wr.left); best.script.y=Math.max(0,gy-wr.top); }
+  } else {
+    const wr=world.getBoundingClientRect();
+    project.scripts.push({id:nid(),x:Math.max(0,gx-wr.left),y:Math.max(0,gy-wr.top),blocks:chain});
+  }
+  render(); save();
+}
+function stopBlockTree(){}
+
+function tapBlock(p){
+  if(p.ptype) return; // palette tap: nothing
+  const loc=locate(p.bid); if(!loc) return; const b=loc.block, d=DEFS[b.type];
+  if(p.chip && d.input){ openPicker(b); return; }
+  if(d.isStart){ runScript(loc.script); return; }
+  if(d.tap){ const keep=b.input; b.type=d.tap; const nd=DEFS[b.type]; if(nd.input && !keep) b.input={...nd.input.def}; render(); save(); return; }
+  if(d.input){ openPicker(b); return; }
+}
+
+/* =====================================================================
+   INPUT PICKER
+   ===================================================================== */
+const mback=$('mback'), modal=$('modal');
+function closeModal(){ mback.classList.remove('show'); modal.innerHTML=''; }
+mback.addEventListener('pointerdown',e=>{ if(e.target===mback) closeModal(); });
+function openPicker(b){
+  const d=DEFS[b.type], spec=d.input;
+  const mainKinds=spec.kinds.filter(k=>['color','sound','bg','num','text','letter','event'].includes(k));
+  const quick=spec.kinds.filter(k=>['inf','rand','display','dist'].includes(k));
+  let cur=mainKinds.includes(b.input.k)?b.input.k:mainKinds[0];
+  if(b.input.k==='num'&&['color','sound','bg'].includes(mainKinds[0])) cur=mainKinds[0];
+  const set=(inp)=>{ b.input=inp; render(); save(); closeModal(); };
+  const TABICON={color:ICON.bulb.replace(/#fff/g,'#16A3A0'),sound:ICON.note.replace(/#fff/g,'#E2453C'),bg:ICON.picture.replace(/fill="#fff"/,'fill="#D0384F"'),num:'123',text:'abc',letter:'A',event:null};
+  function draw(){
+    modal.innerHTML='';
+    const tabs=document.createElement('div'); tabs.className='mtabs';
+    mainKinds.forEach(k=>{ const t=document.createElement('button'); t.className='mtab'+(k===cur?' on':''); if(k==='event'){ t.style.background='var(--sensor)'; t.innerHTML=ICON.closer; } else t.innerHTML=TABICON[k]; t.onclick=()=>{cur=k;draw();}; tabs.appendChild(t); });
+    if(mainKinds.length>1||quick.length) { const sp=document.createElement('div'); sp.style.flex='1'; sp.style.minWidth='12px'; tabs.appendChild(sp); }
+    quick.forEach(k=>{ const q=document.createElement('button'); q.className='qbtn '+(k==='dist'?'sens':'inp'); q.innerHTML={inf:ICON.inf,rand:ICON.dice,display:ICON.dispIn,dist:ICON.distVal}[k]; q.title={inf:'Sonsuza kadar',rand:'Rastgele',display:'Ekrandaki sayı',dist:'Mesafe sensörü değeri'}[k]; q.onclick=()=>set({k}); tabs.appendChild(q); });
+    modal.appendChild(tabs);
+    const body=document.createElement('div'); modal.appendChild(body);
+    if(cur==='color'){
+      body.className='grid'; body.style.gridTemplateColumns='repeat(6,64px)';
+      COLORS.forEach((c,i)=>{ const btn=document.createElement('button'); btn.className='cell'+(b.input.k==='num'&&b.input.v===i?' sel':''); btn.style.cssText=`width:64px;height:64px;border-radius:50%;background:${rgbCss(c)};color:${i===0?'#fff':i===10?'#333':'#fff'};text-shadow:0 0 3px rgba(0,0,0,.6)`; btn.textContent=i; btn.onclick=()=>{ hub.setLed(i); set({k:'num',v:i}); }; body.appendChild(btn); });
+    } else if(cur==='sound'){
+      body.className='grid'; body.style.gridTemplateColumns='repeat(5,72px)';
+      for(let i=1;i<=NS;i++){ const btn=document.createElement('button'); btn.className='cell'+(b.input.k==='num'&&b.input.v===i?' sel':''); btn.style.cssText='width:72px;height:64px;background:var(--sound);color:#fff'; btn.textContent=i; btn.onclick=()=>{ playSound(i); set({k:'num',v:i}); }; body.appendChild(btn); }
+      const r=document.createElement('button'); r.className='cell'; r.style.cssText='width:72px;height:64px'; r.innerHTML=ICON.rec.replace('<svg','<svg width="40" height="40"'); r.title='Kendi sesini kaydet (0)'; r.onclick=()=>recordSound(b); body.appendChild(r);
+      const z=document.createElement('button'); z.className='cell'+(b.input.k==='num'&&b.input.v===0?' sel':''); z.style.cssText='width:72px;height:64px;background:#ffd9d6'; z.textContent='0'; z.title='Kaydedilen ses'; z.onclick=()=>{ playSound(0); set({k:'num',v:0}); }; body.appendChild(z);
+    } else if(cur==='bg'){
+      body.className='grid'; body.style.gridTemplateColumns='repeat(4,auto)';
+      for(let i=1;i<=NB;i++){ const btn=document.createElement('button'); btn.className='cell bgThumb'+(b.input.k==='num'&&b.input.v===i?' sel':''); btn.style.cssText='padding:4px;position:relative'; btn.innerHTML=bgSvg(i)+`<span style="position:absolute;left:8px;top:6px;background:#fff;border-radius:8px;padding:0 6px;font-size:16px">${i}</span>`; btn.onclick=()=>set({k:'num',v:i}); body.appendChild(btn); }
+    } else if(cur==='num'){
+      let s=b.input.k==='num'?String(b.input.v):'';
+      const show=document.createElement('div'); show.className='numShow'; show.textContent=s||'0'; body.appendChild(show);
+      const g=document.createElement('div'); g.className='grid'; g.style.gridTemplateColumns='repeat(3,78px)'; body.appendChild(g);
+      const keys=['7','8','9','4','5','6','1','2','3',spec.dec?'.':'−','0','⌫'];
+      keys.forEach(k=>{ const btn=document.createElement('button'); btn.className='cell'; btn.style.height='62px'; btn.textContent=k; btn.onclick=()=>{
+        if(k==='⌫') s=s.slice(0,-1); else if(k==='−') s=s.startsWith('-')?s.slice(1):'-'+s; else if(k==='.'){ if(!s.includes('.')) s=(s||'0')+'.'; } else s=(s==='0'?'':s)+k;
+        if(s.replace('-','').length>6) s=s.slice(0,-1); show.textContent=s||'0'; }; g.appendChild(btn); });
+      const ok=document.createElement('button'); ok.className='cell okBtn'; ok.style.cssText='height:62px;width:100%;margin-top:10px'; ok.textContent='✓';
+      ok.onclick=()=>{ let v=parseFloat(s); if(isNaN(v)) v=0; if(spec.range) v=clamp(v,spec.range[0],spec.range[1]); set({k:'num',v}); }; body.appendChild(ok);
+    } else if(cur==='text'){
+      const inp=document.createElement('input'); inp.className='txtIn'; inp.maxLength=12; inp.value=b.input.k==='text'?b.input.v:''; body.appendChild(inp);
+      const ok=document.createElement('button'); ok.className='cell okBtn'; ok.style.cssText='height:62px;width:100%'; ok.textContent='✓';
+      ok.onclick=()=>set({k:'text',v:inp.value.trim()||'a'}); body.appendChild(ok); setTimeout(()=>inp.focus(),50);
+      inp.addEventListener('keydown',e=>{ if(e.key==='Enter') ok.onclick(); e.stopPropagation(); });
+    } else if(cur==='letter'){
+      body.className='grid'; body.style.gridTemplateColumns='repeat(7,56px)';
+      'ABCÇDEFGHIİJKLMNOÖPRSŞTUÜVYZ0123456789'.split('').forEach(ch=>{ const btn=document.createElement('button'); btn.className='cell'+(b.input.v===ch?' sel':''); btn.style.height='56px'; btn.textContent=ch; btn.onclick=()=>set({k:'letter',v:ch}); body.appendChild(btn); });
+    } else if(cur==='event'){
+      body.className='grid'; body.style.gridTemplateColumns='repeat(5,76px)';
+      Object.keys(EVENT_ICON).forEach(ev=>{ const btn=document.createElement('button'); btn.className='cell'+(b.input.k==='event'&&b.input.v===ev?' sel':''); btn.style.cssText='height:70px;background:var(--sensor)'; btn.title=EVENT_NAME[ev]; btn.innerHTML=ICON[ev].replace('<svg','<svg width="48" height="48"'); btn.onclick=()=>set({k:'event',v:ev}); body.appendChild(btn); });
+    }
+  }
+  draw(); mback.classList.add('show');
+}
+async function recordSound(b){
+  if(!navigator.mediaDevices||!window.MediaRecorder){ toast('Bu tarayıcıda ses kaydı yapılamıyor.'); return; }
+  try{
+    const st=await navigator.mediaDevices.getUserMedia({audio:true});
+    const mr=new MediaRecorder(st); const parts=[]; mr.ondataavailable=e=>parts.push(e.data);
+    mr.onstop=async()=>{ st.getTracks().forEach(t=>t.stop()); try{ const buf=await new Blob(parts).arrayBuffer(); recordedBuf=await audio().decodeAudioData(buf); toast('Ses kaydedildi! (ses 0)'); b.input={k:'num',v:0}; render(); save(); playSound(0);}catch(e){ toast('Kayıt okunamadı.'); } };
+    mr.start(); toast('Kaydediliyor… (3 saniye)'); setTimeout(()=>mr.stop(),3000);
+  }catch(e){ toast('Mikrofon izni verilmedi.'); }
+}
+
+/* =====================================================================
+   HUB — LEGO WeDo 2.0 Smarthub over Web Bluetooth
+   ===================================================================== */
+const U=s=>`0000${s}-1212-efde-1523-785feabcd123`;
+const SVC_HUB=U('1523'), SVC_IO=U('4f0e');
+const CH_ATTACHED=U('1527'), CH_INPUT_VAL=U('1560'), CH_INPUT_CMD=U('1563'), CH_OUTPUT=U('1565');
+const T_MOTOR=0x01, T_TILT=0x22, T_DIST=0x23, T_LED=0x17;
+const hub={
+  device:null, ch:{}, ports:{}, connected:false, q:Promise.resolve(),
+  led:0, distance:null, prevDist:null, tiltX:0, tiltY:0,
+  motorLevel:8, motorDir:1, motorOn:false,
+  write(char,bytes){ const data=new Uint8Array(bytes);
+    this.q=this.q.then(()=>{ if(!this.connected||!char) return; const p=char.properties||{};
+      if(p.writeWithoutResponse && char.writeValueWithoutResponse) return char.writeValueWithoutResponse(data);
+      return char.writeValue(data); }).catch(e=>console.warn('BLE write',e));
+    return this.q; },
+  inputCmd(port,type,mode,delta,unit,notify){ return this.write(this.ch.inCmd,[1,2,port,type,mode,delta&255,(delta>>8)&255,(delta>>16)&255,(delta>>24)&255,unit,notify?1:0]); },
+  async connect(){
+    if(!navigator.bluetooth){ showBtHelp(); return; }
+    setBt('busy');
+    try{
+      const dev=await navigator.bluetooth.requestDevice({filters:[{services:[SVC_HUB]},{namePrefix:'LPF2'}],optionalServices:[SVC_HUB,SVC_IO]});
+      this.device=dev; dev.addEventListener('gattserverdisconnected',()=>this.onDisconnect());
+      const srv=await dev.gatt.connect();
+      const sh=await srv.getPrimaryService(SVC_HUB), si=await srv.getPrimaryService(SVC_IO);
+      this.ch.att=await sh.getCharacteristic(CH_ATTACHED);
+      this.ch.val=await si.getCharacteristic(CH_INPUT_VAL);
+      this.ch.inCmd=await si.getCharacteristic(CH_INPUT_CMD);
+      this.ch.out=await si.getCharacteristic(CH_OUTPUT);
+      this.connected=true; this.ports={};
+      this.ch.val.addEventListener('characteristicvaluechanged',e=>this.onValue(new Uint8Array(e.target.value.buffer)));
+      await this.ch.val.startNotifications();
+      this.ch.att.addEventListener('characteristicvaluechanged',e=>this.onAttach(new Uint8Array(e.target.value.buffer)));
+      await this.ch.att.startNotifications();
+      await this.inputCmd(6,T_LED,1,0,0,false); // LED -> RGB mode
+      this.setLed(3);
+      setBt('on'); toast('Hub bağlandı!');
+    }catch(e){ console.warn(e); this.connected=false; setBt('off'); if(e&&e.name!=='NotFoundError') toast('Bağlanamadı: hub açık mı? (yeşil düğmeye bas)'); }
+  },
+  disconnect(){ try{ this.device&&this.device.gatt.disconnect(); }catch(e){} },
+  onDisconnect(){ this.connected=false; this.ports={}; setBt('off'); updatePorts(); toast('Hub bağlantısı koptu.'); },
+  onAttach(d){ const port=d[0], att=d[1];
+    if(port!==1&&port!==2) return;
+    if(att){ const type=d[3]; this.ports[port]=type;
+      if(type===T_TILT||type===T_DIST) this.inputCmd(port,type,0,1,0,true);
+      if(type===T_MOTOR && this.motorOn) this.sendMotor();
+    } else delete this.ports[port];
+    updatePorts(); },
+  onValue(d){ const port=d[1], type=this.ports[port];
+    if(type===T_DIST) sensorDistance(d[2]);
+    else if(type===T_TILT){ const s=v=>v>127?v-256:v; sensorTilt(s(d[2]),s(d[3])); } },
+  setLed(i){ i=clamp(Math.round(i),0,10); this.led=i; $('ledDot').style.background=rgbCss(COLORS[i]); const c=COLORS[i]; this.write(this.ch.out,[6,4,3,c[0],c[1],c[2]]); },
+  power(){ return this.motorLevel<=0?0:Math.round(18+this.motorLevel*8.2); },
+  sendMotor(){ const p=this.motorOn?this.power()*this.motorDir:0; const b=p<0?256+p:p;
+    [1,2].forEach(port=>{ if(this.ports[port]===T_MOTOR) this.write(this.ch.out,[port,1,1,b]); });
+    const g=$('motorGlyph'); g.classList.toggle('spin',this.motorOn&&this.motorLevel>0); g.classList.toggle('rev',this.motorDir<0); g.style.setProperty('--spd',(2.2-this.motorLevel*.18).toFixed(2)+'s'); },
+  motorStart(dir){ if(dir) this.motorDir=dir; this.motorOn=true; this.sendMotor(); },
+  motorStop(){ this.motorOn=false; this.sendMotor(); },
+};
+function setBt(st){ const b=$('btConnect'); b.classList.remove('on','busy'); if(st!=='off') b.classList.add(st); $('btLabel').textContent=st==='on'?'Bağlı':st==='busy'?'Bağlanıyor…':'Bağlan'; }
+$('btConnect').onclick=()=>{ if(hub.connected){ hub.disconnect(); } else hub.connect(); };
+function updatePorts(){ const t=Object.values(hub.ports); $('hubStat').title='Hub: '+(hub.connected?('bağlı. Bağlı parçalar: '+(t.map(x=>({1:'motor',34:'eğim',35:'mesafe'}[x]||x)).join(', ')||'yok')):'bağlı değil'); }
+
+/* ---------- sensors & events ---------- */
+const counters={closer:0,further:0,anyDist:0,shake:0,soundCh:0};
+let tiltState='noTilt', shakeAcc=0, lastTilt=[0,0];
+function sensorDistance(v){ v=clamp(v,0,10); const p=hub.distance; hub.distance=v; $('distVal').textContent=v;
+  if(p!==null && v!==p){ counters.anyDist++; if(v<p) counters.closer++; else counters.further++; } }
+function sensorTilt(x,y){
+  hub.tiltX=x; hub.tiltY=y;
+  shakeAcc+=Math.abs(x-lastTilt[0])+Math.abs(y-lastTilt[1]); lastTilt=[x,y];
+  const T=10; let s='noTilt';
+  if(Math.max(Math.abs(x),Math.abs(y))>=T){ if(Math.abs(y)>=Math.abs(x)) s=y>0?'tiltUp':'tiltDown'; else s=x>0?'tiltThis':'tiltThat'; }
+  setTilt(s);
+}
+function setTilt(s){ tiltState=s; $('tiltVal').innerHTML=`<span style="display:inline-grid;background:var(--sensor);border-radius:8px;padding:2px">${ICON[s]}</span>`; }
+setInterval(()=>{ if(shakeAcc>70) counters.shake++; shakeAcc=Math.max(0,shakeAcc-35); },300);
+/* microphone level for "sound change" */
+let micOn=false, micLevel=0, micAvg=0;
+async function startMic(){
+  if(micOn) return; micOn=true;
+  try{ const st=await navigator.mediaDevices.getUserMedia({audio:true}); const a=audio(); const src=a.createMediaStreamSource(st); const an=a.createAnalyser(); an.fftSize=512; src.connect(an); const buf=new Uint8Array(an.fftSize);
+    const tick=()=>{ an.getByteTimeDomainData(buf); let m=0; for(const v of buf) m=Math.max(m,Math.abs(v-128)); micLevel=Math.round(m/12.8); $('micVal').textContent=micLevel; if(micLevel>micAvg+3 && micLevel>=4) counters.soundCh++; micAvg=micAvg*.9+micLevel*.1; requestAnimationFrame(tick); }; tick();
+  }catch(e){ micOn=false; toast('Mikrofon kullanılamıyor (izin verilmedi).'); }
+}
+
+/* =====================================================================
+   INTERPRETER
+   ===================================================================== */
+let gen=0; const runningScripts=new Map();
+const STOP=Symbol('stop');
+function stopAll(){ gen++; runningScripts.clear(); [...running].forEach(id=>setRunning(id,false)); hub.motorStop(); }
+$('stopBtn').onclick=stopAll;
+function sleep(ms,ctx){ return new Promise((res,rej)=>{ const end=performance.now()+ms; const t=()=>{ if(ctx.gen!==gen) return rej(STOP); if(performance.now()>=end) return res(); setTimeout(t,Math.min(30,end-performance.now())); }; t(); }); }
+async function until(cond,ctx){ while(!cond()){ if(ctx.gen!==gen) throw STOP; await new Promise(r=>setTimeout(r,25)); } }
+function value(b){
+  const inp=b.input, d=DEFS[b.type].input||{};
+  switch(inp.k){
+    case 'num': return Number(inp.v);
+    case 'text': case 'letter': return inp.v;
+    case 'rand': { const [a,z]=d.rand||[0,10]; return a+Math.floor(Math.random()*(z-a+1)); }
+    case 'display': return dispNum();
+    case 'dist': return hub.distance===null?10:hub.distance;
+    case 'inf': return Infinity;
+    case 'event': return {event:inp.v};
+  }
+}
+function eventWatcher(ev){
+  if(ev==='soundCh') startMic();
+  if(TILT_STATES.includes(ev)) return ()=>tiltState===ev;
+  const c0=counters[ev]; return ()=>counters[ev]>c0;
+}
+async function runList(list,ctx){ for(const b of list){ if(ctx.gen!==gen) throw STOP; await exec(b,ctx); } }
+async function exec(b,ctx){
+  setRunning(b.id,true);
+  try{
+    const v=b.input?value(b):undefined;
+    switch(b.type){
+      case 'start': case 'startKey': case 'startMsg': await sleep(60,ctx); break;
+      case 'sendMsg': triggerMessage(String(v)); await sleep(60,ctx); break;
+      case 'wait': if(v&&v.event){ await until(eventWatcher(v.event),ctx); } else await sleep(Math.max(0,+v||0)*1000,ctx); break;
+      case 'repeat':
+        if(v&&v.event){ const done=eventWatcher(v.event); do{ await runList(b.children,ctx); await sleep(b.children.length?0:50,ctx); }while(!done()); }
+        else if(v===Infinity){ for(;;){ await runList(b.children,ctx); await sleep(b.children.length?0:50,ctx); } }
+        else { const n=Math.max(0,Math.round(+v||0)); for(let i=0;i<n;i++){ await runList(b.children,ctx); await sleep(0,ctx); } }
+        break;
+      case 'motorThis': hub.motorStart(1); await sleep(80,ctx); break;
+      case 'motorThat': hub.motorStart(-1); await sleep(80,ctx); break;
+      case 'motorPower': hub.motorLevel=clamp(+v||0,0,10); hub.motorStart(); await sleep(80,ctx); break;
+      case 'motorOn': hub.motorStart(); await sleep(Math.max(0,+v||0)*1000,ctx); hub.motorStop(); break;
+      case 'motorOff': hub.motorStop(); await sleep(80,ctx); break;
+      case 'light': hub.setLed(+v||0); await sleep(80,ctx); break;
+      case 'sound': { const d=playSound(+v||0); await sleep(d*1000,ctx); break; }
+      case 'background': disp.bg=clamp(Math.round(+v||1),1,NB); if(disp.size==='closed') disp.size='medium'; drawDisp(); await sleep(80,ctx); break;
+      case 'display': disp.value=typeof v==='number'?fmt(v):String(v); if(disp.size==='closed') disp.size='medium'; drawDisp(); await sleep(80,ctx); break;
+      case 'dispAdd': case 'dispSub': case 'dispMul': case 'dispDiv': {
+        let n=dispNum(), x=+v||0;
+        n=b.type==='dispAdd'?n+x:b.type==='dispSub'?n-x:b.type==='dispMul'?n*x:(x===0?n:n/x);
+        disp.value=fmt(Math.round(n*100)/100); if(disp.size==='closed') disp.size='medium'; drawDisp(); await sleep(80,ctx); break; }
+      case 'dispClose': disp.size='closed'; drawDisp(); await sleep(60,ctx); break;
+      case 'dispMed': disp.size='medium'; drawDisp(); await sleep(60,ctx); break;
+      case 'dispFull': disp.size='full'; drawDisp(); await sleep(60,ctx); break;
+    }
+  } finally { setRunning(b.id,false); }
+}
+async function runScript(s){
+  if(!s.blocks.length || !DEFS[s.blocks[0].type].isStart) return;
+  if(runningScripts.has(s.id)) return;
+  audio();
+  const ctx={gen}; runningScripts.set(s.id,ctx);
+  try{ await runList(s.blocks,ctx); }catch(e){ if(e!==STOP) console.error(e); }
+  finally{ if(runningScripts.get(s.id)===ctx) runningScripts.delete(s.id); }
+}
+function triggerMessage(msg){ msg=msg.toLowerCase(); project.scripts.forEach(s=>{ const f=s.blocks[0]; if(f&&f.type==='startMsg'&&String(f.input.v).toLowerCase()===msg) runScript(s); }); }
+document.addEventListener('keydown',e=>{
+  if(mback.classList.contains('show')) return; if(e.repeat) return;
+  const k=e.key.toLocaleUpperCase('tr-TR');
+  project.scripts.forEach(s=>{ const f=s.blocks[0]; if(f&&f.type==='startKey'&&f.input.v===k) runScript(s); });
+});
+
+/* ---------- display ---------- */
+const disp={size:'closed',bg:0,value:''};
+function dispNum(){ const n=parseFloat(String(disp.value).replace(',','.')); return isNaN(n)?0:n; }
+function drawDisp(){ const el=$('disp'); el.className=disp.size==='closed'?'':disp.size; $('dispBg').innerHTML=bgSvg(disp.bg); $('dispTxt').textContent=disp.value; }
+$('dispClose').onclick=()=>{ disp.size='closed'; drawDisp(); };
+
+/* =====================================================================
+   UI helpers, toolbar, sim panel, help
+   ===================================================================== */
+function clamp(v,a,b){ return Math.min(b,Math.max(a,v)); }
+function fmt(v){ return (Math.round(v*100)/100).toString().replace('.',','); }
+function escapeHtml(s){ return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let toastT; function toast(m){ const t=$('toast'); t.textContent=m; t.style.display='block'; clearTimeout(toastT); toastT=setTimeout(()=>t.style.display='none',2800); }
+$('icoDist').innerHTML=`<span style="display:inline-grid;background:var(--sensor);border-radius:8px;padding:2px">${ICON.distVal}</span>`;
+$('icoMic').innerHTML=`<span style="display:inline-grid;background:var(--sensor);border-radius:8px;padding:2px">${ICON.soundCh}</span>`;
+setTilt('noTilt');
+$('simBtn').innerHTML=ICON.sim; $('saveBtn').innerHTML=ICON.save; $('openBtn').innerHTML=ICON.open; $('newBtn').innerHTML=ICON.trash;
+$('simBtn').onclick=()=>$('simPanel').classList.toggle('show');
+$('simDist').oninput=e=>{ $('simDistV').textContent=e.target.value; sensorDistance(+e.target.value); };
+['tiltUp','tiltDown','tiltThis','tiltThat','noTilt','shake'].forEach(s=>{ const b=document.createElement('button'); b.innerHTML=ICON[s]; b.title=EVENT_NAME[s]; b.onclick=()=>{ if(s==='shake'){ counters.shake++; } else setTilt(s); }; $('simTilt').appendChild(b); });
+$('simSound').innerHTML=ICON.soundCh; $('simSound').onclick=()=>counters.soundCh++;
+$('newBtn').onclick=()=>confirmBox('Tüm blokları silip yeni proje açılsın mı?',()=>{ stopAll(); project={scripts:[{id:nid(),x:40,y:40,blocks:[newBlock('start')]}]}; render(); save(); });
+$('saveBtn').onclick=()=>{ try{ const blob=new Blob([JSON.stringify(project,null,1)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='bilkod-robot-proje.json'; document.body.appendChild(a); a.click(); a.remove(); }catch(e){ toast('Kaydedilemedi.'); } };
+$('openBtn').onclick=()=>$('fileIn').click();
+$('fileIn').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; try{ const p=JSON.parse(await f.text()); if(!Array.isArray(p.scripts)) throw 0; stopAll(); project=fixIds(p); render(); save(); toast('Proje açıldı.'); }catch(err){ toast('Bu dosya açılamadı.'); } e.target.value=''; };
+function confirmBox(msg,yes){ modal.innerHTML=`<p style="font-size:20px;font-weight:700;max-width:360px">${msg}</p><div style="display:flex;gap:10px"><button class="cell okBtn" style="flex:1;height:60px" id="cYes">✓</button><button class="cell" style="flex:1;height:60px" id="cNo">✕</button></div>`; mback.classList.add('show'); $('cYes').onclick=()=>{closeModal();yes();}; $('cNo').onclick=closeModal; }
+function showBtHelp(){
+  modal.innerHTML=`<div class="help" style="max-width:520px"><h2>Bluetooth kullanılamıyor</h2>
+  <p>Bu tarayıcı ya da bu sayfa hub'a bağlanamıyor. Şunlara bakın:</p>
+  <ul><li><b>Chrome</b> (veya Edge) kullanın. Android tablet, Windows ve Chromebook olur. <b>iPad/iPhone'da çalışmaz.</b></li>
+  <li>Sayfa bir <b>https://</b> adresinden açılmalı (ör. Netlify ya da GitHub Pages). Dosyaya çift tıklayarak açınca bağlantı çalışmayabilir.</li>
+  <li>Cihazın Bluetooth'u açık olmalı.</li></ul>
+  <p>Hub olmadan da program yapabilirsiniz: motor ve ışık üstteki göstergede görünür; sensörleri <b>deneme panelinden</b> deneyebilirsiniz.</p>
+  <button class="cell okBtn" style="height:56px;width:100%" onclick="closeModal()">Tamam</button></div>`;
+  mback.classList.add('show');
+}
+$('helpBtn').onclick=()=>{
+  modal.innerHTML=`<div class="help" style="max-width:560px"><h2>Nasıl kullanılır?</h2><ol>
+  <li>Hub'ın yeşil düğmesine basın (ışık yanıp söner), sonra <b>Bağlan</b>'a basıp listeden hub'ı seçin.</li>
+  <li>Alttaki renkli sekmelerden blokları sürükleyip <b>başlat</b> bloğunun sağına bırakın.</li>
+  <li>Blokların altındaki mavi/turuncu kutuya dokunarak sayı, renk, ses ya da sensör seçin.</li>
+  <li>Motor yönü ve ekran işlemleri bloğa dokununca değişir.</li>
+  <li>Programı çalıştırmak için <b>başlat</b> bloğuna dokunun. Kırmızı kare her şeyi durdurur.</li>
+  <li>Bloğu silmek için aşağıdaki blok alanına geri sürükleyin.</li></ol>
+  <p style="color:#6b7a8c;font-size:13px">LEGO WeDo 2.0 Smarthub ile çalışır. Chrome / Edge gerekir (Android, Windows, Chromebook). iPad desteklenmez.</p>
+  <button class="cell okBtn" style="height:56px;width:100%" onclick="closeModal()">Tamam</button></div>`;
+  mback.classList.add('show');
+};
+
+/* ---------- boot ---------- */
+project=load(); renderPalette(); render(); drawDisp(); hub.setLed(0); updatePorts();
+window.__app={project:()=>project,hub,counters,runScript,disp};
+</script>
+</body>
+</html>
